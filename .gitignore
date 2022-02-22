@@ -2,3 +2,4 @@
 inference/output/*
 wandb/
 runs/
+dataset/
