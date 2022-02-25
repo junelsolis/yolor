@@ -3,3 +3,5 @@ inference/output/*
 wandb/
 runs/
 dataset/
+resnet/resnet_dataset
+resnet/*.pth
