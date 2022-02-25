@@ -1,3 +1,4 @@
+import wandb
 import numpy as np
 import torch
 from torchvision import datasets, transforms, models
@@ -6,12 +7,26 @@ from torch.utils.data.sampler import SubsetRandomSampler
 data_dir = "resnet_dataset"
 
 
-def load_split_train_test(datadir, valid_size=0.2):
+def load_split_train_test(datadir, valid_size=0.25):
     train_transforms = transforms.Compose(
-        [transforms.AutoAugment(), transforms.Resize((128, 128)), transforms.ToTensor()]
+        [
+            transforms.Resize((128, 128)),
+            # transforms.GaussianBlur(3),
+            # transforms.RandomRotation(25),
+            # transforms.RandomAdjustSharpness(),
+            # transforms.RandomAutoContrast(),
+            transforms.ToTensor(),
+        ]
     )
     test_transforms = transforms.Compose(
-        [transforms.AutoAugment(), transforms.Resize((128, 128)), transforms.ToTensor()]
+        [
+            transforms.Resize((128, 128)),
+            # transforms.GaussianBlur(3),
+            # transforms.RandomRotation(25),
+            # transforms.RandomAdjustSharpness(),
+            # transforms.RandomAutoContrast(),
+            transforms.ToTensor(),
+        ]
     )
 
     train_data = datasets.ImageFolder(datadir, transform=train_transforms)
@@ -26,10 +41,10 @@ def load_split_train_test(datadir, valid_size=0.2):
     train_sampler = SubsetRandomSampler(train_idx)
     test_sampler = SubsetRandomSampler(test_idx)
     trainloader = torch.utils.data.DataLoader(
-        train_data, sampler=train_sampler, batch_size=64
+        train_data, sampler=train_sampler, batch_size=128
     )
     testloader = torch.utils.data.DataLoader(
-        test_data, sampler=test_sampler, batch_size=64
+        test_data, sampler=test_sampler, batch_size=128
     )
 
     return trainloader, testloader
@@ -39,7 +54,7 @@ trainloader, testloader = load_split_train_test(data_dir, 0.25)
 print(trainloader.dataset.classes)
 
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-model = torch.hub.load("pytorch/vision:v0.11.3", "resnet152", pretrained=False)
+model = torch.hub.load("pytorch/vision:v0.11.3", "resnet152", pretrained=True)
 
 for param in model.parameters():
     param.requires_grad = False
@@ -61,6 +76,17 @@ steps = 0
 running_loss = 0
 print_every = 10
 train_losses, test_losses = [], []
+
+wandb.login()
+wandb.init(project="ihc-classifier", entity="junelsolis")
+wandb.config = {
+    "learning_rate": 0.003,
+    "optimizer": "Adam",
+    "epochs": epochs,
+    "batch_size": 128,
+}
+
+# wandb.log({'lo'})
 
 for epoch in range(epochs):
     for inputs, labels in trainloader:
@@ -97,6 +123,14 @@ for epoch in range(epochs):
                 f"Test accuracy: {accuracy/len(testloader):.3f}"
             )
             running_loss = 0
+            wandb.log(
+                {
+                    "train_loss": running_loss / len(trainloader),
+                    "test_loss": test_loss / len(testloader),
+                    "test_accuracy": accuracy / len(testloader),
+                    "epoch": epoch + 1,
+                }
+            )
             model.train()
 
 torch.save(model, "ihc-classifier-00.pth")
