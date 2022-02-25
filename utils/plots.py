@@ -76,6 +76,32 @@ def plot_one_box(x, img, color=None, label=None, line_thickness=None):
         )
 
 
+def plot_one_dot(x, img, color=None, label=None):
+    # Plots one bounding box on image img
+    c1, c2 = (int(x[0]), int(x[1]))
+    cv2.circle(
+        img,
+        (c1, c2),
+        color=color,
+        radius=3,
+        thickness=3,
+    )
+    if label:
+        # tf = max(tl - 1, 1)  # font thickness
+        t_size = cv2.getTextSize(label, 0, fontScale=tl / 3, thickness=tf)[0]
+        c2 = c1[0] + t_size[0], c1[1] - t_size[1] - 3
+        # cv2.putText(
+        #     img,
+        #     label,
+        #     (c1[0], c1[1] - 2),
+        #     0,
+        #     tl / 3,
+        #     [225, 255, 255],
+        #     thickness=tf,
+        #     lineType=cv2.LINE_AA,
+        # )
+
+
 def plot_wh_methods():  # from utils.general import *; plot_wh_methods()
     # Compares the two methods for width-height anchor multiplication
     # https://github.com/ultralytics/yolov3/issues/168

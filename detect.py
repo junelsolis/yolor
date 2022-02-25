@@ -20,7 +20,7 @@ from utils.general import (
     xyxy2xywh,
     strip_optimizer,
 )
-from utils.plots import plot_one_box
+from utils.plots import plot_one_box, plot_one_dot
 from utils.torch_utils import select_device, load_classifier, time_synchronized
 
 from models.models import *
@@ -153,6 +153,13 @@ def detect(save_img=False):
                             .view(-1)
                             .tolist()
                         )  # normalized xywh
+
+                        coords = (
+                            (xyxy2xywh(torch.tensor(xyxy).view(1, 4))).view(-1).tolist()
+                        )
+
+                        # print(test)
+
                         with open(txt_path + ".txt", "a") as f:
                             f.write(("%g " * 5 + "\n") % (cls, *xywh))  # label format
 
@@ -162,14 +169,15 @@ def detect(save_img=False):
                         if cls == 1:
                             color = [0, 255, 0]
                         # label = "%s %.2f" % (names[int(cls)], conf)
-                        plot_one_box(
-                            xyxy,
-                            im0,
-                            # label=label,
-                            # color=colors[int(cls)],
-                            color=color,
-                            line_thickness=2,
-                        )
+                        # plot_one_box(
+                        #     xyxy,
+                        #     im0,
+                        #     # label=label,
+                        #     # color=colors[int(cls)],
+                        #     color=color,
+                        #     line_thickness=2,
+                        # )
+                        plot_one_dot(coords, im0, color=color)
 
             # Print time (inference + NMS)
             print("%sDone. (%.3fs)" % (s, t2 - t1))
