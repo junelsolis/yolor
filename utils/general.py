@@ -587,7 +587,7 @@ def apply_classifier(x, model, img, im0):
             ims = []
             for j, a in enumerate(d):  # per item
                 cutout = im0[i][int(a[1]) : int(a[3]), int(a[0]) : int(a[2])]
-                im = cv2.resize(cutout, (224, 224))  # BGR
+                im = cv2.resize(cutout, (128, 128))  # BGR
                 # cv2.imwrite('test%i.jpg' % j, cutout)
 
                 im = im[:, :, ::-1].transpose(2, 0, 1)  # BGR to RGB, to 3x416x416
@@ -595,6 +595,7 @@ def apply_classifier(x, model, img, im0):
                 im /= 255.0  # 0 - 255 to 0.0 - 1.0
                 ims.append(im)
 
+            ims = np.array(ims)
             pred_cls2 = model(torch.Tensor(ims).to(d.device)).argmax(
                 1
             )  # classifier prediction
