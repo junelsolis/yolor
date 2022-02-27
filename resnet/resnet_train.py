@@ -1,133 +1,218 @@
 import wandb
-import numpy as np
 import torch
-from torchvision import datasets, transforms, models
-from torch.utils.data.sampler import SubsetRandomSampler
+import time
+import argparse
+from tqdm import tqdm
+
+from datasets import get_datasets, get_data_loaders
+
+# construct the argument parser
+parser = argparse.ArgumentParser()
+parser.add_argument(
+    "-e",
+    "--epochs",
+    type=int,
+    default=20,
+    help="Number of epochs to train our network for",
+)
+parser.add_argument(
+    "-pt",
+    "--pretrained",
+    action="store_true",
+    help="Whether to use pretrained weights or not",
+)
+parser.add_argument(
+    "-lr",
+    "--learning-rate",
+    type=float,
+    dest="learning_rate",
+    default=0.0001,
+    help="Learning rate for training the model",
+)
+args = vars(parser.parse_args())
 
 data_dir = "resnet_dataset"
 
 
-def load_split_train_test(datadir, valid_size=0.25):
-    train_transforms = transforms.Compose(
-        [
-            transforms.RandomHorizontalFlip(),
-            transforms.RandomVerticalFlip(),
-            transforms.Resize((128, 128)),
-            transforms.ToTensor(),
-        ]
-    )
-    test_transforms = transforms.Compose(
-        [
-            transforms.RandomHorizontalFlip(),
-            transforms.RandomVerticalFlip(),
-            transforms.Resize((128, 128)),
-            transforms.ToTensor(),
-        ]
-    )
-
-    train_data = datasets.ImageFolder(datadir, transform=train_transforms)
-    test_data = datasets.ImageFolder(datadir, transform=test_transforms)
-
-    num_train = len(train_data)
-    indices = list(range(num_train))
-    split = int(np.floor(valid_size * num_train))
-    np.random.shuffle(indices)
-
-    train_idx, test_idx = indices[split:], indices[:split]
-    train_sampler = SubsetRandomSampler(train_idx)
-    test_sampler = SubsetRandomSampler(test_idx)
-    trainloader = torch.utils.data.DataLoader(
-        train_data, sampler=train_sampler, batch_size=64
-    )
-    testloader = torch.utils.data.DataLoader(
-        test_data, sampler=test_sampler, batch_size=64
+def build_model(pretrained=True, fine_tune=False, num_classes=2):
+    if pretrained:
+        print("[INFO]: Loading pre-trained weights")
+    else:
+        print("[INFO]: Not loading pre-trained weights")
+    # model = models.efficientnet_b3(pretrained=pretrained)
+    model = torch.hub.load("pytorch/vision:v0.11.3", "resnet152", pretrained=False)
+    if fine_tune:
+        print("[INFO]: Fine-tuning all layers...")
+        for params in model.parameters():
+            params.requires_grad = True
+    elif not fine_tune:
+        print("[INFO]: Freezing hidden layers...")
+        for params in model.parameters():
+            params.requires_grad = False
+    # Change the final classification head.
+    # model.classifier[1] = torch.nn.Linear(in_features=1280, out_features=num_classes)
+    model.fc = torch.nn.Sequential(
+        torch.nn.Linear(2048, 512),
+        torch.nn.ReLU(),
+        torch.nn.Dropout(0.2),
+        torch.nn.Linear(512, num_classes),
+        torch.nn.LogSoftmax(dim=1),
     )
 
-    return trainloader, testloader
+    return model
 
 
-trainloader, testloader = load_split_train_test(data_dir, 0.25)
-print(trainloader.dataset.classes)
+# wandb.login()
+# wandb.init(project="ihc-classifier", entity="junelsolis")
+# wandb.config = {
+#     "learning_rate": 0.003,
+#     "optimizer": "Adam",
+#     "epochs": epochs,
+#     "batch_size": 64,
+# }
 
-device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-model = torch.hub.load("pytorch/vision:v0.11.3", "resnet152", pretrained=True)
 
-for param in model.parameters():
-    param.requires_grad = False
-
-model.fc = torch.nn.Sequential(
-    torch.nn.Linear(2048, 512),
-    torch.nn.ReLU(),
-    torch.nn.Dropout(0.2),
-    torch.nn.Linear(512, 10),
-    torch.nn.LogSoftmax(dim=1),
-)
-criterion = torch.nn.NLLLoss()
-optimizer = torch.optim.Adam(model.fc.parameters(), lr=0.003)
-# optimizer = torch.optim.Adam(model.parameters(), lr=0.003)
-
-model.to(device)
-
-epochs = 60
-steps = 0
-running_loss = 0
-print_every = 10
-train_losses, test_losses = [], []
-
-wandb.login()
-wandb.init(project="ihc-classifier", entity="junelsolis")
-wandb.config = {
-    "learning_rate": 0.003,
-    "optimizer": "Adam",
-    "epochs": epochs,
-    "batch_size": 64,
-}
-
-# wandb.log({'lo'})
-
-for epoch in range(epochs):
-    for inputs, labels in trainloader:
-        steps += 1
-        inputs, labels = inputs.to(device), labels.to(device)
+def train(model, trainloader, optimizer, criterion):
+    model.train()
+    print("Training")
+    train_running_loss = 0.0
+    train_running_correct = 0
+    counter = 0
+    for i, data in tqdm(enumerate(trainloader), total=len(trainloader)):
+        counter += 1
+        image, labels = data
+        image = image.to(device)
+        labels = labels.to(device)
         optimizer.zero_grad()
-        logps = model.forward(inputs)
-        loss = criterion(logps, labels)
+        # Forward pass.
+        outputs = model(image)
+        # Calculate the loss.
+        loss = criterion(outputs, labels)
+        train_running_loss += loss.item()
+        # Calculate the accuracy.
+        _, preds = torch.max(outputs.data, 1)
+        train_running_correct += (preds == labels).sum().item()
+        # Backpropagation
         loss.backward()
+        # Update the weights.
         optimizer.step()
-        running_loss += loss.item()
 
-        if steps % print_every == 0:
-            test_loss = 0
-            accuracy = 0
-            model.eval()
-            with torch.no_grad():
-                for inputs, labels in testloader:
-                    inputs, labels = inputs.to(device), labels.to(device)
-                    logps = model.forward(inputs)
-                    batch_loss = criterion(logps, labels)
-                    test_loss += batch_loss.item()
+    # Loss and accuracy for the complete epoch.
+    epoch_loss = train_running_loss / counter
+    epoch_acc = 100.0 * (train_running_correct / len(trainloader.dataset))
+    return epoch_loss, epoch_acc
 
-                    ps = torch.exp(logps)
-                    top_p, top_class = ps.topk(1, dim=1)
-                    equals = top_class == labels.view(*top_class.shape)
-                    accuracy += torch.mean(equals.type(torch.FloatTensor)).item()
-            train_losses.append(running_loss / len(trainloader))
-            test_losses.append(test_loss / len(testloader))
-            print(
-                f"Epoch {epoch+1}/{epochs}.. "
-                f"Train loss: {running_loss/print_every:.3f}.. "
-                f"Test loss: {test_loss/len(testloader):.3f}.. "
-                f"Test accuracy: {accuracy/len(testloader):.3f}"
-            )
-            running_loss = 0
-            wandb.log(
-                {
-                    "train_loss": running_loss / len(trainloader),
-                    "test_loss": test_loss / len(testloader),
-                    "test_accuracy": accuracy / len(testloader),
-                    "epoch": epoch + 1,
-                }
-            )
-            model.train()
 
-torch.save(model, "ihc-classifier-01.pth")
+# Validation function.
+def validate(model, testloader, criterion):
+    model.eval()
+    print("Validation")
+    valid_running_loss = 0.0
+    valid_running_correct = 0
+    counter = 0
+    with torch.no_grad():
+        for i, data in tqdm(enumerate(testloader), total=len(testloader)):
+            counter += 1
+
+            image, labels = data
+            image = image.to(device)
+            labels = labels.to(device)
+            # Forward pass.
+            outputs = model(image)
+            # Calculate the loss.
+            loss = criterion(outputs, labels)
+            valid_running_loss += loss.item()
+            # Calculate the accuracy.
+            _, preds = torch.max(outputs.data, 1)
+            valid_running_correct += (preds == labels).sum().item()
+
+    # Loss and accuracy for the complete epoch.
+    epoch_loss = valid_running_loss / counter
+    epoch_acc = 100.0 * (valid_running_correct / len(testloader.dataset))
+    return epoch_loss, epoch_acc
+
+
+if __name__ == "__main__":
+    # Load the training and validation datasets.
+    dataset_train, dataset_valid, dataset_classes = get_datasets(args["pretrained"])
+    print(f"[INFO]: Number of training images: {len(dataset_train)}")
+    print(f"[INFO]: Number of validation images: {len(dataset_valid)}")
+    print(f"[INFO]: Class names: {dataset_classes}\n")
+
+    # Load the training and validation data loaders.
+    train_loader, valid_loader = get_data_loaders(dataset_train, dataset_valid)
+
+    # Learning_parameters.
+    lr = args["learning_rate"]
+    epochs = args["epochs"]
+    device = "cuda" if torch.cuda.is_available() else "cpu"
+    print(f"Computation device: {device}")
+    print(f"Learning rate: {lr}")
+    print(f"Epochs to train for: {epochs}\n")
+    model = build_model(
+        pretrained=args["pretrained"], fine_tune=True, num_classes=len(dataset_classes)
+    ).to(device)
+
+    # Total parameters and trainable parameters.
+    total_params = sum(p.numel() for p in model.parameters())
+    print(f"{total_params:,} total parameters.")
+    total_trainable_params = sum(
+        p.numel() for p in model.parameters() if p.requires_grad
+    )
+    print(f"{total_trainable_params:,} training parameters.")
+
+    # Optimizer.
+    optimizer = torch.optim.Adam(model.parameters(), lr=lr)
+
+    # Loss function.
+    criterion = torch.nn.CrossEntropyLoss()
+
+    wandb.login()
+    wandb.init(project="ihc-classifier", entity="junelsolis")
+    wandb.config = {
+        "learning_rate": lr,
+        "optimizer": "Adam",
+        "epochs": epochs,
+        "batch_size": 32,
+    }
+
+    # Lists to keep track of losses and accuracies.
+    train_loss, valid_loss = [], []
+    train_acc, valid_acc = [], []
+    # Start the training.
+    for epoch in range(epochs):
+        print(f"[INFO]: Epoch {epoch+1} of {epochs}")
+        train_epoch_loss, train_epoch_acc = train(
+            model, train_loader, optimizer, criterion
+        )
+        valid_epoch_loss, valid_epoch_acc = validate(model, valid_loader, criterion)
+        train_loss.append(train_epoch_loss)
+        valid_loss.append(valid_epoch_loss)
+        train_acc.append(train_epoch_acc)
+        valid_acc.append(valid_epoch_acc)
+        print(
+            f"Training loss: {train_epoch_loss:.3f}, training acc: {train_epoch_acc:.3f}"
+        )
+        print(
+            f"Validation loss: {valid_epoch_loss:.3f}, validation acc: {valid_epoch_acc:.3f}"
+        )
+        print("-" * 50)
+
+        wandb.log(
+            {
+                "train_loss": train_epoch_loss,
+                "train_acc": train_epoch_acc,
+                "val_loss": valid_epoch_loss,
+                "val_acc": valid_epoch_acc,
+                "epoch": epoch,
+            }
+        )
+
+        time.sleep(5)
+
+    # Save the trained model weights.
+    # save_model(epochs, model, optimizer, criterion, args['pretrained'])
+    # # Save the loss and accuracy plots.
+    # save_plots(train_acc, valid_acc, train_loss, valid_loss, args['pretrained'])
+    torch.save(model, "ihc-classifier-02.pth")
+    print("TRAINING COMPLETE")
