@@ -1,0 +1,17 @@
+name: yolor
+channels:
+  - conda-forge
+dependencies:
+  - python=3.9
+  - pytorch=1.10.2
+  - torchvision=0.11.3
+  - cudatoolkit=11.3
+  - ca-certificates
+  - openssl
+  - tqdm
+  - pandas
+  - pycocotools
+  - opencv
+  - certifi
+  - setuptools
+  - wandb
