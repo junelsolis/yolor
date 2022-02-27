@@ -10,21 +10,17 @@ data_dir = "resnet_dataset"
 def load_split_train_test(datadir, valid_size=0.25):
     train_transforms = transforms.Compose(
         [
+            transforms.RandomHorizontalFlip(),
+            transforms.RandomVerticalFlip(),
             transforms.Resize((128, 128)),
-            # transforms.GaussianBlur(3),
-            # transforms.RandomRotation(25),
-            # transforms.RandomAdjustSharpness(),
-            # transforms.RandomAutoContrast(),
             transforms.ToTensor(),
         ]
     )
     test_transforms = transforms.Compose(
         [
+            transforms.RandomHorizontalFlip(),
+            transforms.RandomVerticalFlip(),
             transforms.Resize((128, 128)),
-            # transforms.GaussianBlur(3),
-            # transforms.RandomRotation(25),
-            # transforms.RandomAdjustSharpness(),
-            # transforms.RandomAutoContrast(),
             transforms.ToTensor(),
         ]
     )
@@ -41,10 +37,10 @@ def load_split_train_test(datadir, valid_size=0.25):
     train_sampler = SubsetRandomSampler(train_idx)
     test_sampler = SubsetRandomSampler(test_idx)
     trainloader = torch.utils.data.DataLoader(
-        train_data, sampler=train_sampler, batch_size=128
+        train_data, sampler=train_sampler, batch_size=64
     )
     testloader = torch.utils.data.DataLoader(
-        test_data, sampler=test_sampler, batch_size=128
+        test_data, sampler=test_sampler, batch_size=64
     )
 
     return trainloader, testloader
@@ -68,6 +64,7 @@ model.fc = torch.nn.Sequential(
 )
 criterion = torch.nn.NLLLoss()
 optimizer = torch.optim.Adam(model.fc.parameters(), lr=0.003)
+# optimizer = torch.optim.Adam(model.parameters(), lr=0.003)
 
 model.to(device)
 
@@ -83,7 +80,7 @@ wandb.config = {
     "learning_rate": 0.003,
     "optimizer": "Adam",
     "epochs": epochs,
-    "batch_size": 128,
+    "batch_size": 64,
 }
 
 # wandb.log({'lo'})
@@ -133,4 +130,4 @@ for epoch in range(epochs):
             )
             model.train()
 
-torch.save(model, "ihc-classifier-00.pth")
+torch.save(model, "ihc-classifier-01.pth")
