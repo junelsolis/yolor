@@ -77,7 +77,8 @@ def detect(save_img=False):
         # #     torch.load("weights/resnet101.pt", map_location=device)["model"]
         # # )  # load weights
         # modelc.to(device).eval()
-        modelc = torch.load("resnet/ihc-classifier-00.pth")
+        modelc = torch.load("resnet/volcanic-brook-59.pth")
+        # modelc = torch.load("resnet/ihc-classifier-00.pth")
         modelc.to(device).eval()
 
     # Set Dataloader

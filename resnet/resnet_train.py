@@ -5,6 +5,7 @@ import argparse
 from tqdm import tqdm
 
 from datasets import get_datasets, get_data_loaders
+from model import build_model
 
 # construct the argument parser
 parser = argparse.ArgumentParser()
@@ -26,50 +27,12 @@ parser.add_argument(
     "--learning-rate",
     type=float,
     dest="learning_rate",
-    default=0.0001,
+    default=0.001,
     help="Learning rate for training the model",
 )
 args = vars(parser.parse_args())
 
 data_dir = "resnet_dataset"
-
-
-def build_model(pretrained=True, fine_tune=False, num_classes=2):
-    if pretrained:
-        print("[INFO]: Loading pre-trained weights")
-    else:
-        print("[INFO]: Not loading pre-trained weights")
-    # model = models.efficientnet_b3(pretrained=pretrained)
-    model = torch.hub.load("pytorch/vision:v0.11.3", "resnet152", pretrained=False)
-    if fine_tune:
-        print("[INFO]: Fine-tuning all layers...")
-        for params in model.parameters():
-            params.requires_grad = True
-    elif not fine_tune:
-        print("[INFO]: Freezing hidden layers...")
-        for params in model.parameters():
-            params.requires_grad = False
-    # Change the final classification head.
-    # model.classifier[1] = torch.nn.Linear(in_features=1280, out_features=num_classes)
-    model.fc = torch.nn.Sequential(
-        torch.nn.Linear(2048, 512),
-        torch.nn.ReLU(),
-        torch.nn.Dropout(0.2),
-        torch.nn.Linear(512, num_classes),
-        torch.nn.LogSoftmax(dim=1),
-    )
-
-    return model
-
-
-# wandb.login()
-# wandb.init(project="ihc-classifier", entity="junelsolis")
-# wandb.config = {
-#     "learning_rate": 0.003,
-#     "optimizer": "Adam",
-#     "epochs": epochs,
-#     "batch_size": 64,
-# }
 
 
 def train(model, trainloader, optimizer, criterion):

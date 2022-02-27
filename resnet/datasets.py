@@ -5,8 +5,8 @@ from torch.utils.data import DataLoader, Subset
 # Required constants.
 ROOT_DIR = "resnet_dataset"
 VALID_SPLIT = 0.25
-IMAGE_SIZE = 64  # Image size of resize when applying transforms.
-BATCH_SIZE = 32
+IMAGE_SIZE = 96  # Image size of resize when applying transforms.
+BATCH_SIZE = 96
 NUM_WORKERS = 8  # Number of parallel processes for data preparation.
 
 # Training transforms
@@ -31,7 +31,7 @@ def get_valid_transform(IMAGE_SIZE, pretrained):
             transforms.Resize((IMAGE_SIZE, IMAGE_SIZE)),
             transforms.RandomHorizontalFlip(p=0.5),
             transforms.RandomVerticalFlip(p=0.5),
-            transforms.RandomAdjustSharpness(sharpness_factor=2, p=0.5),
+            # transforms.RandomAdjustSharpness(sharpness_factor=2, p=0.5),
             transforms.ToTensor(),
             normalize_transform(pretrained),
         ]

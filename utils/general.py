@@ -587,7 +587,8 @@ def apply_classifier(x, model, img, im0):
             ims = []
             for j, a in enumerate(d):  # per item
                 cutout = im0[i][int(a[1]) : int(a[3]), int(a[0]) : int(a[2])]
-                im = cv2.resize(cutout, (128, 128))  # BGR
+                # im = cv2.resize(cutout, (128, 128))  # BGR
+                im = cv2.resize(cutout, (96, 96))
                 # cv2.imwrite('test%i.jpg' % j, cutout)
 
                 im = im[:, :, ::-1].transpose(2, 0, 1)  # BGR to RGB, to 3x416x416
